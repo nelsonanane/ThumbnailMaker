@@ -307,23 +307,19 @@ async def generate_from_url(
         print(f"[DEBUG] Thumbnail text: {prompt_data.get('thumbnail_text', 'N/A')}")
 
         if imagen_generator is not None:
-            print(f"[DEBUG] Using Gemini 3 Pro Image for generation")
-            # Get the first reference image and face image if available
-            reference_image = None
-            if request.reference_thumbnails and len(request.reference_thumbnails) > 0:
-                reference_image = request.reference_thumbnails[0].data
-                print(f"[DEBUG] Passing reference thumbnail to Gemini")
+            print(f"[DEBUG] Using Gemini for generation")
+            # NOTE: We do NOT pass the reference image to the generator
+            # The reference was analyzed and its FORMAT is already in the prompt
+            # We only pass the face photos - these are the ONLY people who should appear
 
-            face_image = None
+            print(f"[DEBUG] Reference FORMAT is included in prompt (not raw image)")
             if request.face_images and len(request.face_images) > 0:
-                face_image = request.face_images[0]
-                print(f"[DEBUG] Passing face photo to Gemini")
+                print(f"[DEBUG] Passing {len(request.face_images)} face photo(s) to Gemini")
 
             result = await imagen_generator.generate_thumbnail(
                 prompt=prompt_data["prompt"],
                 num_images=request.num_variations,
-                reference_image=reference_image,
-                face_image=face_image,
+                face_images=request.face_images,  # All face photos, not just one
             )
         else:
             print(f"[DEBUG] Using FLUX for generation (Imagen not available)")
@@ -421,11 +417,15 @@ async def generate_from_prompt(
             )
 
         # Generate images using Imagen (preferred) or FLUX as fallback
+        # NOTE: Reference FORMAT is in the prompt, we only pass face photos
         if imagen_generator is not None:
-            print(f"[DEBUG] Using Imagen for generation (from prompt)")
+            print(f"[DEBUG] Using Gemini for generation (from prompt)")
+            if request.face_images and len(request.face_images) > 0:
+                print(f"[DEBUG] Passing {len(request.face_images)} face photo(s) to Gemini")
             result = await imagen_generator.generate_thumbnail(
                 prompt=enhanced_prompt,
                 num_images=request.num_variations,
+                face_images=request.face_images,  # All face photos
             )
         else:
             print(f"[DEBUG] Using FLUX for generation (Imagen not available)")

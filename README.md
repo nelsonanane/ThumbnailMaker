@@ -7,10 +7,9 @@ AI-powered YouTube thumbnail generator that creates professional, viral-style th
 - **YouTube URL Analysis** - Paste a URL, get context-aware thumbnails
 - **Custom Prompts** - Write your own prompt for creative control
 - **Reference Images** - Upload thumbnails to match their style
-- **Multi-Face Support** - Upload multiple face photos:
-  - **First photo** = Primary person (main character, reactor)
-  - **Additional photos** = Secondary people (replace other faces in reference)
-  - AI analyzes ALL faces individually and uses them in the thumbnail
+- **Face Photos** - Upload faces to replace characters in the reference format
+  - All uploaded faces are used in the thumbnail
+  - Face 1 replaces character position 1, Face 2 replaces position 2, etc.
 - **Style Templates** - MrBeast, Educational, Tech, Minimalist styles
 - **Text Overlay** - Automatic eye-catching text generation
 - **4 Variations** - Each generation produces 4 options
@@ -91,22 +90,29 @@ ThumbnailMaker/
 ## How It Works
 
 ```
-YouTube URL → Extract title, description, transcript
-     ↓
-Reference Images → Analyze exact style, composition, colors with GPT-4o Vision
-     ↓
-Face Photos → Analyze EACH face individually:
-             - Photo 1 = PRIMARY (main character/reactor)
-             - Photo 2+ = SECONDARY (replace other people in reference)
-     ↓
-Prompt Generation → GPT-4o creates prompt using ALL face descriptions
-     ↓
-Image Generation → Google Imagen creates 4 thumbnails with all faces
-     ↓
-Text Overlay → Pillow adds gradient + text
-     ↓
-Results → Display in gallery, click to download
+1. INPUTS:
+   YouTube URL    → Video context (title, description, transcript)
+   Reference      → FORMAT only (layout, poses, colors) - analyzed as TEXT
+   Face Photos    → The ONLY people who will appear in the thumbnail
+
+2. ANALYSIS (GPT-4o Vision):
+   Reference      → Extracts FORMAT as text (layout, pose types, expression types, colors)
+   Face Photos    → Describes each face in detail
+
+3. PROMPT GENERATION:
+   Combines FORMAT description + Face descriptions + Video topic
+   (Reference image is NOT passed to the generator - only its FORMAT as text)
+
+4. IMAGE GENERATION (Gemini):
+   Receives: TEXT prompt + Face IMAGES only
+   Creates thumbnails using YOUR faces in the reference FORMAT
+   Characters from reference NEVER appear - only your face photos
+
+5. OUTPUT:
+   4 thumbnail variations + Text overlay
 ```
+
+**Key Point:** The reference image is analyzed for FORMAT only (as text). It is NEVER sent to the image generator. Only face photos are sent, ensuring no characters from the reference appear in your thumbnails.
 
 ## Cost Per Generation
 
