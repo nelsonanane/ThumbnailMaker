@@ -47,8 +47,15 @@ export function FacePhotoUploader() {
       </div>
 
       <p className="text-xs text-gray-500">
-        Upload photos of your face to include yourself in the generated thumbnails.
+        Upload face photos of people to include in your thumbnails. All faces will be used.
       </p>
+      <div className="rounded-lg bg-gray-700/50 p-2 text-xs text-gray-400">
+        <strong className="text-purple-400">How face photos work:</strong>
+        <ul className="mt-1 ml-2 space-y-0.5">
+          <li><span className="text-purple-300">First photo</span> = Primary person (main reactor/character)</li>
+          <li><span className="text-gray-300">Additional photos</span> = Secondary people (replace other faces in reference)</li>
+        </ul>
+      </div>
 
       {/* Dropzone */}
       {facePhotos.length < 3 && (
@@ -107,12 +114,12 @@ export function FacePhotoUploader() {
                 </svg>
               </button>
 
-              {/* Primary badge */}
-              {index === 0 && (
-                <div className="absolute bottom-0 left-1/2 -translate-x-1/2 transform rounded-t bg-purple-500 px-2 py-0.5 text-[10px] font-medium text-white">
-                  Primary
-                </div>
-              )}
+              {/* Role badge */}
+              <div className={`absolute bottom-0 left-1/2 -translate-x-1/2 transform rounded-t px-2 py-0.5 text-[10px] font-medium text-white ${
+                index === 0 ? 'bg-purple-500' : 'bg-gray-600'
+              }`}>
+                {index === 0 ? 'Primary' : `Face ${index + 1}`}
+              </div>
             </div>
           ))}
         </div>
@@ -120,7 +127,9 @@ export function FacePhotoUploader() {
 
       {facePhotos.length > 0 && (
         <p className="text-xs text-gray-500">
-          The first photo will be used as the primary reference for your face in the thumbnail.
+          {facePhotos.length === 1
+            ? 'This face will be the main person in your thumbnail.'
+            : `All ${facePhotos.length} faces will be used. Primary face = main character, others replace additional people in reference.`}
         </p>
       )}
     </div>

@@ -7,10 +7,14 @@ AI-powered YouTube thumbnail generator that creates professional, viral-style th
 - **YouTube URL Analysis** - Paste a URL, get context-aware thumbnails
 - **Custom Prompts** - Write your own prompt for creative control
 - **Reference Images** - Upload thumbnails to match their style
-- **Face Photos** - Include your face in generated thumbnails
+- **Multi-Face Support** - Upload multiple face photos:
+  - **First photo** = Primary person (main character, reactor)
+  - **Additional photos** = Secondary people (replace other faces in reference)
+  - AI analyzes ALL faces individually and uses them in the thumbnail
 - **Style Templates** - MrBeast, Educational, Tech, Minimalist styles
 - **Text Overlay** - Automatic eye-catching text generation
 - **4 Variations** - Each generation produces 4 options
+- **Easy Download** - Click to download thumbnails (works with base64 images)
 
 ## Quick Start
 
@@ -89,17 +93,19 @@ ThumbnailMaker/
 ```
 YouTube URL → Extract title, description, transcript
      ↓
-Reference Images → Analyze style with GPT-4o Vision
+Reference Images → Analyze exact style, composition, colors with GPT-4o Vision
      ↓
-Face Photos → Describe appearance with GPT-4o Vision
+Face Photos → Analyze EACH face individually:
+             - Photo 1 = PRIMARY (main character/reactor)
+             - Photo 2+ = SECONDARY (replace other people in reference)
      ↓
-Prompt Generation → GPT-4o creates optimized prompt
+Prompt Generation → GPT-4o creates prompt using ALL face descriptions
      ↓
-Image Generation → Google Imagen creates 4 thumbnails
+Image Generation → Google Imagen creates 4 thumbnails with all faces
      ↓
 Text Overlay → Pillow adds gradient + text
      ↓
-Results → Display in gallery with download
+Results → Display in gallery, click to download
 ```
 
 ## Cost Per Generation

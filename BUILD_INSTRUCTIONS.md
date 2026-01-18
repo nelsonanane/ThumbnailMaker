@@ -10,15 +10,23 @@ This document contains step-by-step instructions to build an AI-powered YouTube 
 - Paste a YouTube URL and get AI-generated thumbnails based on video content
 - Write custom prompts for full creative control
 - Upload reference thumbnails to match a specific style
-- Upload face photos to include their face in thumbnails
+- Upload MULTIPLE face photos with intelligent role assignment:
+  - **First photo = Primary person** (main character, reactor, focal point)
+  - **Additional photos = Secondary people** (replace other characters in reference thumbnails)
 - Choose from pre-built style templates
 - Get automatic text overlay on thumbnails
+- Download generated thumbnails directly (works with base64 images)
 
 **Tech Stack:**
 - Frontend: Next.js 16, React 19, TypeScript, Tailwind CSS, Zustand
 - Backend: Python FastAPI
 - AI: Google Gemini for image generation, OpenAI GPT-4o for prompt generation
 - APIs: YouTube Data API, YouTube Transcript API
+
+**Key Features:**
+1. **Multi-Face Support**: Upload multiple face photos - AI analyzes EACH person individually and uses ALL of them in the generated thumbnail
+2. **Reference Style Matching**: Upload existing thumbnails you like, AI extracts exact composition, colors, text style and replicates it
+3. **Smart Download**: Proper file download for base64-encoded images (converts to blob and triggers download)
 
 ---
 
@@ -929,34 +937,70 @@ Return a JSON object with:
 
         return json.loads(response.choices[0].message.content)
 
-    def analyze_face_photos(self, images: List[str]) -> str:
-        """Analyze face photos and generate a description."""
+    def analyze_face_photos(self, images: List[str]) -> dict:
+        """
+        Analyze ALL face photos individually. Returns structured data for each person.
+
+        IMPORTANT: First photo = PRIMARY person (main character/reactor)
+                   Additional photos = SECONDARY people (replace other faces in reference)
+
+        Returns dict with:
+        - faces: list of {index, role, description}
+        - primary_face: description of first person
+        - secondary_faces: list of descriptions for other people
+        - combined_description: summary of all people
+        """
+        if not images:
+            return {"faces": [], "primary_face": "", "secondary_faces": [], "combined_description": ""}
 
         content = [
-            {"type": "text", "text": "Describe this person's appearance for image generation (hair, face shape, distinctive features). Be detailed but concise:"}
+            {"type": "text", "text": f"Analyze these {len(images)} face photos. Each is a DIFFERENT person:"}
         ]
 
-        for img_data in images[:2]:  # Limit to 2 images
+        for i, img_data in enumerate(images):
+            role = "PRIMARY - main character/reactor" if i == 0 else "SECONDARY - supporting character"
+            content.append({"type": "text", "text": f"\n--- PERSON {i + 1} ({role}) ---"})
             content.append({
                 "type": "image_url",
                 "image_url": {"url": f"data:image/jpeg;base64,{img_data}"}
             })
 
+        system_prompt = """Analyze each face photo and return JSON:
+{
+    "faces": [
+        {"index": 1, "role": "primary", "description": "Detailed description of person 1"},
+        {"index": 2, "role": "secondary", "description": "Detailed description of person 2"}
+    ],
+    "combined_description": "Summary of all people"
+}
+Be detailed: ethnicity, skin tone, hair, facial features, age, gender."""
+
         response = self.client.chat.completions.create(
             model="gpt-4o",
-            messages=[{"role": "user", "content": content}],
-            max_tokens=300
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": content}
+            ],
+            response_format={"type": "json_object"},
+            max_tokens=1000
         )
 
-        return response.choices[0].message.content
+        result = json.loads(response.choices[0].message.content)
+
+        # Extract primary and secondary for easy access
+        faces = result.get("faces", [])
+        result["primary_face"] = faces[0]["description"] if faces else ""
+        result["secondary_faces"] = [f["description"] for f in faces[1:]] if len(faces) > 1 else []
+
+        return result
 
     def generate_style_enhanced_prompt(
         self,
         base_prompt: str,
         reference_analysis: Optional[dict] = None,
-        face_description: Optional[str] = None,
+        face_description: Optional[dict] = None,  # Now expects dict, not string
     ) -> str:
-        """Enhance a prompt with reference style and face description."""
+        """Enhance a prompt with reference style and ALL face descriptions."""
 
         enhanced = base_prompt
 
@@ -965,9 +1009,19 @@ Return a JSON object with:
             if style:
                 enhanced += f". Style: {style}"
 
+        # Handle face_description - can be dict (new) or string (legacy)
         if face_description:
-            enhanced = enhanced.replace("a person", f"a person ({face_description})")
-            enhanced = enhanced.replace("A person", f"A person ({face_description})")
+            if isinstance(face_description, dict):
+                primary = face_description.get("primary_face", "")
+                secondary = face_description.get("secondary_faces", [])
+
+                if primary:
+                    enhanced += f"\n\nPRIMARY PERSON (main character): {primary}"
+                for i, sec in enumerate(secondary):
+                    enhanced += f"\n\nSECONDARY PERSON {i+1}: {sec}"
+            else:
+                # Legacy string format
+                enhanced = enhanced.replace("a person", f"a person ({face_description})")
 
         return enhanced
 ```

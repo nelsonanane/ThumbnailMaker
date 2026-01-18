@@ -88,6 +88,40 @@ Example output: "A Black man in his 30s with dark brown skin, short black hair, 
 Be specific and detailed so the AI can accurately generate images of this person."""
 
 
+MULTI_FACE_ANALYSIS_PROMPT = """Analyze these face photos. Each photo is a DIFFERENT person who should appear in the thumbnail.
+
+For EACH person, provide a detailed description including:
+1. ETHNICITY/SKIN TONE: Specific description
+2. FACE SHAPE: Round, oval, square, etc.
+3. FACIAL HAIR: Beard, mustache, clean-shaven, stubble
+4. HAIR: Style, color, length
+5. DISTINCTIVE FEATURES: Any notable features
+6. AGE RANGE: Approximate age
+7. GENDER: Male/Female
+
+Return a JSON object with this structure:
+{
+    "faces": [
+        {
+            "index": 1,
+            "role": "primary",
+            "description": "Detailed description of person 1 (this is the MAIN character/reactor)"
+        },
+        {
+            "index": 2,
+            "role": "secondary",
+            "description": "Detailed description of person 2 (this replaces other people in reference)"
+        }
+    ],
+    "combined_description": "A summary describing all people for use in prompts"
+}
+
+IMPORTANT:
+- Person 1 (first photo) is ALWAYS the PRIMARY person - the main character, the reactor, the focal point
+- Person 2+ are SECONDARY people who replace any other characters in reference thumbnails
+- Be extremely detailed so the AI can accurately generate these specific people"""
+
+
 class ReferenceAnalyzer:
     """Analyzes reference thumbnails and face photos using GPT-4o Vision."""
 
@@ -232,28 +266,101 @@ class ReferenceAnalyzer:
     def analyze_face_photos(
         self,
         face_images: List[str],
-    ) -> str:
+    ) -> dict:
         """
-        Analyze face photos and generate a description for use in thumbnail generation.
+        Analyze ALL face photos individually and generate descriptions for each.
 
         Args:
             face_images: List of base64 encoded face photos
 
         Returns:
-            Combined description of the faces for prompt generation
+            Dictionary with individual face descriptions and combined description:
+            {
+                "faces": [
+                    {"index": 1, "role": "primary", "description": "..."},
+                    {"index": 2, "role": "secondary", "description": "..."}
+                ],
+                "combined_description": "...",
+                "primary_face": "description of first/main person",
+                "secondary_faces": ["descriptions of other people"]
+            }
         """
         if not face_images:
-            return ""
+            return {
+                "faces": [],
+                "combined_description": "",
+                "primary_face": "",
+                "secondary_faces": []
+            }
 
+        # Build content with ALL face images labeled
         content = [
             {
                 "type": "text",
-                "text": "Analyze these face photos for use in YouTube thumbnail generation. Describe how to best represent this person in thumbnails:"
+                "text": f"Analyze these {len(face_images)} face photos. Each is a DIFFERENT person:"
             }
         ]
 
-        for face_image in face_images:
+        for i, face_image in enumerate(face_images):
+            content.append({
+                "type": "text",
+                "text": f"\n--- PERSON {i + 1} {'(PRIMARY - main character/reactor)' if i == 0 else '(SECONDARY - replaces other characters)'} ---"
+            })
             content.append(self._prepare_image_content(face_image))
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": MULTI_FACE_ANALYSIS_PROMPT},
+                {"role": "user", "content": content}
+            ],
+            response_format={"type": "json_object"},
+            max_tokens=1000,
+            temperature=0.3,
+        )
+
+        raw_content = response.choices[0].message.content
+        print(f"[DEBUG] Face analysis result: {raw_content[:500]}...")
+
+        try:
+            result = json.loads(raw_content.strip())
+        except json.JSONDecodeError:
+            # Fallback: analyze first face only
+            result = {
+                "faces": [{"index": 1, "role": "primary", "description": "A person"}],
+                "combined_description": "A person"
+            }
+
+        # Extract primary and secondary faces for easier access
+        faces = result.get("faces", [])
+        primary_face = ""
+        secondary_faces = []
+
+        for face in faces:
+            if face.get("role") == "primary" or face.get("index") == 1:
+                primary_face = face.get("description", "")
+            else:
+                secondary_faces.append(face.get("description", ""))
+
+        result["primary_face"] = primary_face
+        result["secondary_faces"] = secondary_faces
+
+        return result
+
+    def analyze_single_face(self, face_image: str) -> str:
+        """
+        Analyze a single face photo (legacy method for backward compatibility).
+
+        Args:
+            face_image: Base64 encoded face photo
+
+        Returns:
+            Description string for the face
+        """
+        content = [
+            {"type": "text", "text": "Analyze this face photo:"},
+            self._prepare_image_content(face_image)
+        ]
 
         response = self.client.chat.completions.create(
             model=self.model,
@@ -271,28 +378,40 @@ class ReferenceAnalyzer:
         self,
         base_prompt: str,
         reference_analysis: Optional[dict] = None,
-        face_description: Optional[str] = None,
+        face_description: Optional[dict] = None,
     ) -> str:
         """
-        Enhance a base prompt with reference style information.
+        Enhance a base prompt with reference style information and multiple face descriptions.
 
         Args:
             base_prompt: The original image generation prompt
             reference_analysis: Analysis from analyze_reference_thumbnails()
-            face_description: Description from analyze_face_photos()
+            face_description: Dictionary from analyze_face_photos() with faces list
 
         Returns:
-            Enhanced prompt incorporating style information
+            Enhanced prompt incorporating style information and ALL faces
         """
         enhanced_prompt = base_prompt
+
+        # Handle face_description - can be dict (new) or string (legacy)
+        primary_face = ""
+        secondary_faces = []
+
+        if face_description:
+            if isinstance(face_description, dict):
+                primary_face = face_description.get("primary_face", "")
+                secondary_faces = face_description.get("secondary_faces", [])
+            else:
+                # Legacy string format
+                primary_face = face_description
 
         if reference_analysis:
             # Use the recreation_prompt if available (new detailed format)
             if 'recreation_prompt' in reference_analysis:
                 recreation = reference_analysis['recreation_prompt']
-                # Replace placeholders
-                if face_description:
-                    recreation = recreation.replace('[PERSON_DESCRIPTION]', face_description)
+                # Replace placeholders with primary face
+                if primary_face:
+                    recreation = recreation.replace('[PERSON_DESCRIPTION]', primary_face)
                 recreation = recreation.replace('[VIDEO_TOPIC]', base_prompt)
 
                 enhanced_prompt = recreation
@@ -317,11 +436,22 @@ MOOD: {reference_analysis.get('mood', 'energetic')}
 """
             enhanced_prompt += style_addition
 
-        if face_description:
-            enhanced_prompt += f"""
+        # Add ALL face descriptions with clear roles
+        if primary_face or secondary_faces:
+            enhanced_prompt += """
 
-PERSON IN THUMBNAIL (MUST MATCH EXACTLY):
-{face_description}
+PEOPLE IN THUMBNAIL (MUST MATCH EXACTLY):
+"""
+            if primary_face:
+                enhanced_prompt += f"""
+PRIMARY PERSON (main character, reactor, focal point):
+{primary_face}
+"""
+
+            for i, secondary in enumerate(secondary_faces):
+                enhanced_prompt += f"""
+SECONDARY PERSON {i + 1} (replaces other characters in reference):
+{secondary}
 """
 
         return enhanced_prompt

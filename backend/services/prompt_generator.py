@@ -107,7 +107,7 @@ class PromptGenerator:
         template_system_prompt: Optional[str] = None,
         trigger_word: str = "person",
         reference_analysis: Optional[dict] = None,
-        face_description: Optional[str] = None,
+        face_description: Optional[dict] = None,
     ) -> dict:
         """
         Generate a thumbnail prompt from video analysis.
@@ -117,7 +117,7 @@ class PromptGenerator:
             template_system_prompt: Optional template-specific instructions
             trigger_word: Token to use for the person (from LoRA training)
             reference_analysis: Optional analysis from ReferenceAnalyzer
-            face_description: Optional description of user's face photos
+            face_description: Optional dict with 'primary_face', 'secondary_faces', 'faces' from analyze_face_photos()
 
         Returns:
             Dictionary with prompt, thumbnail_text, emotion, composition
@@ -196,10 +196,47 @@ class PromptGenerator:
         description = video_data.get('description') or 'No description'
         transcript = video_data.get('transcript') or 'No transcript available'
 
-        # Build face description section
+        # Build face description section - handle both dict (new) and string (legacy)
         face_section = ""
         if face_description:
-            face_section = f"""
+            if isinstance(face_description, dict):
+                # New format with multiple faces
+                primary_face = face_description.get("primary_face", "")
+                secondary_faces = face_description.get("secondary_faces", [])
+                all_faces = face_description.get("faces", [])
+
+                if primary_face or all_faces:
+                    face_section = """
+
+PEOPLE TO FEATURE IN THUMBNAIL (USE ALL OF THEM):
+"""
+                    if primary_face:
+                        face_section += f"""
+PRIMARY PERSON (main character, reactor, center of attention):
+{primary_face}
+
+This person should be the MAIN focus of the thumbnail - the one reacting, pointing, or engaging the viewer.
+"""
+
+                    for i, secondary in enumerate(secondary_faces):
+                        face_section += f"""
+SECONDARY PERSON {i + 1} (supporting character):
+{secondary}
+
+This person should replace any OTHER characters shown in the reference thumbnail.
+"""
+
+                    face_section += """
+CRITICAL INSTRUCTIONS FOR FACE PHOTOS:
+- The PRIMARY person MUST appear as the main subject/reactor in the thumbnail
+- SECONDARY people replace any other characters from the reference
+- ALL face descriptions must be used - do not ignore any person
+- Match each person's features EXACTLY as described above
+- Maintain the poses and positions from the reference but with THESE specific people"""
+
+            else:
+                # Legacy string format
+                face_section = f"""
 
 PERSON TO FEATURE IN THUMBNAIL:
 {face_description}

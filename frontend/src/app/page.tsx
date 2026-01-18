@@ -1,10 +1,63 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useThumbnailStore } from '@/stores/thumbnailStore';
 import { ReferenceImageUploader, FacePhotoUploader } from '@/components';
 
 export default function Home() {
+  // Download handler for base64 images
+  const handleDownload = useCallback((imageUrl: string, index: number) => {
+    try {
+      // Create a link element
+      const link = document.createElement('a');
+      link.href = imageUrl;
+      link.download = `thumbnail-${index + 1}-${Date.now()}.png`;
+
+      // For base64 data URLs, we need to handle differently
+      if (imageUrl.startsWith('data:')) {
+        // Convert base64 to blob for proper download
+        const byteString = atob(imageUrl.split(',')[1]);
+        const mimeString = imageUrl.split(',')[0].split(':')[1].split(';')[0];
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+          ia[i] = byteString.charCodeAt(i);
+        }
+        const blob = new Blob([ab], { type: mimeString });
+        const blobUrl = URL.createObjectURL(blob);
+        link.href = blobUrl;
+
+        // Trigger download
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Clean up blob URL
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+      } else {
+        // For regular URLs, fetch and download
+        fetch(imageUrl)
+          .then(response => response.blob())
+          .then(blob => {
+            const blobUrl = URL.createObjectURL(blob);
+            link.href = blobUrl;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+          })
+          .catch(err => {
+            console.error('Download failed:', err);
+            // Fallback: open in new tab
+            window.open(imageUrl, '_blank');
+          });
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      // Fallback: open in new tab
+      window.open(imageUrl, '_blank');
+    }
+  }, []);
   const {
     mode,
     setMode,
@@ -284,14 +337,12 @@ export default function Home() {
                           className="h-full w-full object-cover transition-transform group-hover:scale-105"
                         />
                         <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
-                          <a
-                            href={imageUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                          <button
+                            onClick={() => handleDownload(imageUrl, index)}
                             className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-100"
                           >
                             Download
-                          </a>
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -361,15 +412,15 @@ export default function Home() {
                 </li>
                 <li className="flex gap-2">
                   <span className="text-purple-400">3.</span>
-                  Add your face photos to appear in thumbnails
+                  Add face photos (first = main character, others = supporting)
                 </li>
                 <li className="flex gap-2">
                   <span className="text-purple-400">4.</span>
-                  AI analyzes references and generates 4 variations
+                  AI uses ALL faces and generates 4 thumbnail variations
                 </li>
                 <li className="flex gap-2">
                   <span className="text-purple-400">5.</span>
-                  Download your favorite thumbnail
+                  Click Download to save your favorite
                 </li>
               </ol>
             </div>
