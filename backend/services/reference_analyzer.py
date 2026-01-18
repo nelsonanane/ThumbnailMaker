@@ -8,50 +8,67 @@ from typing import List, Optional
 import openai
 
 
-ANALYSIS_SYSTEM_PROMPT = """You are an expert YouTube thumbnail analyst. Your task is to create an EXTREMELY DETAILED structural breakdown of the reference thumbnail that can be used to recreate it with different content.
+ANALYSIS_SYSTEM_PROMPT = """You are an expert YouTube thumbnail FORMAT analyst. Your task is to extract the TEMPLATE/FORMAT from a reference thumbnail - NOT the actual people in it.
 
-Analyze EVERY element with precise details:
+CRITICAL: The reference image is ONLY for extracting:
+- Layout and composition (where things are positioned)
+- Expression TYPES and poses (e.g., "shocked expression", "pointing pose") - NOT the actual person
+- Color scheme and lighting style
+- Text styling and positioning
+- Overall mood and energy
+
+DO NOT describe the specific person in the reference. Instead, describe the ROLE and POSE that a person should take.
+
+Analyze these FORMAT elements:
 
 1. COMPOSITION GRID: Exact layout percentages (e.g., "person occupies left 35%, content right 65%")
-2. PERSON DETAILS: Position, pose, expression, clothing, accessories, lighting on face
-3. BACKGROUND: Exact description of what's behind the person and in each area
-4. TEXT ELEMENTS: Exact text, font style, size relative to image, color, position, effects (shadow, outline, glow)
-5. GRAPHIC ELEMENTS: Icons, screenshots, overlays - their exact positions and sizes
-6. COLOR VALUES: Specific colors (e.g., "bright yellow #FFD700", "dark navy background")
-7. LIGHTING: Direction, intensity, color temperature, any colored lighting effects
-8. SPECIAL EFFECTS: Arrows, circles, emojis, badges, borders, gradients
+2. POSE & EXPRESSION FORMAT: The TYPE of pose and expression (e.g., "shocked with mouth open", "pointing at something") - this will be applied to DIFFERENT people
+3. BACKGROUND: Description of background elements and zones
+4. TEXT ELEMENTS: Text styling, font, size, color, position, effects
+5. GRAPHIC ELEMENTS: Icons, screenshots, overlays - positions and sizes
+6. COLOR SCHEME: The color palette to use
+7. LIGHTING STYLE: Direction, intensity, color temperature
+8. NUMBER OF PEOPLE: How many people appear and their positions (e.g., "two people - one on left reacting, one on right")
 
 OUTPUT FORMAT:
 Return ONLY a valid JSON object with this EXACT structure:
 {{
     "composition": {{
         "layout_type": "split/centered/thirds/etc",
-        "person_position": "left/right/center with percentage (e.g., 'left 35%')",
+        "person_count": 1,
+        "person_positions": ["left 35%", "right 30%"],
         "person_size": "percentage of frame height (e.g., '80%')",
         "background_zones": ["description of each zone from left to right"]
     }},
-    "person": {{
-        "pose": "exact pose description",
-        "expression": "exact facial expression",
-        "eye_direction": "looking at camera/looking at content/etc",
-        "clothing": "visible clothing and accessories",
-        "lighting_on_face": "lighting description"
+    "pose_format": {{
+        "primary_person": {{
+            "position": "left/right/center",
+            "pose": "the pose they should strike (e.g., 'leaning forward, pointing')",
+            "expression_type": "the expression type (e.g., 'shocked with wide eyes and open mouth')",
+            "eye_direction": "looking at camera/looking at content/etc"
+        }},
+        "secondary_people": [
+            {{
+                "position": "where this person is",
+                "pose": "their pose",
+                "expression_type": "their expression type"
+            }}
+        ]
     }},
     "text_elements": [
         {{
-            "text": "exact text content",
+            "text": "exact text content (for reference only - will be changed)",
             "position": "top/bottom/left/right with specifics",
             "font_style": "bold/italic/etc",
             "font_size": "large/medium/small relative to image",
             "color": "color description or hex",
-            "effects": "shadow/outline/glow/none",
-            "background": "text background if any"
+            "effects": "shadow/outline/glow/none"
         }}
     ],
     "graphic_elements": [
         {{
             "type": "screenshot/icon/arrow/emoji/etc",
-            "content": "what it shows",
+            "content": "what type of content",
             "position": "where in the frame",
             "size": "relative size"
         }}
@@ -63,11 +80,12 @@ Return ONLY a valid JSON object with this EXACT structure:
         "background": "background color(s)",
         "text_colors": ["list of text colors used"]
     }},
+    "lighting_style": "description of lighting (e.g., 'dramatic rim lighting from behind')",
     "mood": "overall mood/energy of the thumbnail",
-    "recreation_prompt": "A detailed prompt that would recreate this exact thumbnail structure with placeholders for [PERSON_DESCRIPTION] and [VIDEO_TOPIC]"
+    "format_prompt": "A prompt describing the FORMAT/TEMPLATE only - use [PRIMARY_PERSON] and [SECONDARY_PERSON_N] as placeholders for where the user's faces will go"
 }}
 
-Be EXTREMELY precise. The goal is to recreate this EXACT layout and style with different content."""
+REMEMBER: You are extracting a TEMPLATE. The actual people will come from separate face photos provided by the user. Do NOT copy any person's appearance from the reference."""
 
 
 FACE_ANALYSIS_PROMPT = """Analyze this face photo to create a detailed description for AI image generation.
@@ -406,45 +424,50 @@ class ReferenceAnalyzer:
                 primary_face = face_description
 
         if reference_analysis:
-            # Use the recreation_prompt if available (new detailed format)
-            if 'recreation_prompt' in reference_analysis:
-                recreation = reference_analysis['recreation_prompt']
-                # Replace placeholders with primary face
+            # Use the format_prompt if available (new format)
+            format_prompt = reference_analysis.get('format_prompt') or reference_analysis.get('recreation_prompt', '')
+            if format_prompt:
+                # Replace placeholders with actual face descriptions
                 if primary_face:
-                    recreation = recreation.replace('[PERSON_DESCRIPTION]', primary_face)
-                recreation = recreation.replace('[VIDEO_TOPIC]', base_prompt)
+                    format_prompt = format_prompt.replace('[PRIMARY_PERSON]', primary_face)
+                    format_prompt = format_prompt.replace('[PERSON_DESCRIPTION]', primary_face)
+                for i, sec in enumerate(secondary_faces):
+                    format_prompt = format_prompt.replace(f'[SECONDARY_PERSON_{i+1}]', sec)
+                format_prompt = format_prompt.replace('[VIDEO_TOPIC]', base_prompt)
+                enhanced_prompt = format_prompt
 
-                enhanced_prompt = recreation
-
-            # Add composition details
+            # Add composition details (FORMAT ONLY)
             composition = reference_analysis.get('composition', {})
             colors = reference_analysis.get('colors', {})
+            pose_format = reference_analysis.get('pose_format', {})
 
             style_addition = f"""
 
-EXACT COMPOSITION TO REPLICATE:
-- Layout: {composition.get('layout_type', 'split')}
-- Person position: {composition.get('person_position', 'left side')}
-- Person fills {composition.get('person_size', '80%')} of frame height
+=== REFERENCE FORMAT (layout/style only - NOT the people) ===
+Layout: {composition.get('layout_type', 'split')}
+Person positions: {composition.get('person_positions', ['left side'])}
+Person fills {composition.get('person_size', '80%')} of frame height
 
-EXACT COLORS TO USE:
-- Primary: {colors.get('primary', 'white')}
-- Accent: {colors.get('accent', 'yellow')}
-- Background: {colors.get('background', 'white')}
+Pose/Expression FORMAT to apply:
+{pose_format.get('primary_person', {}).get('pose', 'engaging pose')} with {pose_format.get('primary_person', {}).get('expression_type', 'expressive face')}
 
-MOOD: {reference_analysis.get('mood', 'energetic')}
+Color scheme: Primary {colors.get('primary', 'white')}, Accent {colors.get('accent', 'yellow')}, Background {colors.get('background', 'white')}
+Lighting: {reference_analysis.get('lighting_style', 'dramatic lighting')}
+Mood: {reference_analysis.get('mood', 'energetic')}
+=== END FORMAT ===
 """
             enhanced_prompt += style_addition
 
-        # Add ALL face descriptions with clear roles
+        # Add face descriptions - these are the ONLY people who should appear
         if primary_face or secondary_faces:
             enhanced_prompt += """
 
-PEOPLE IN THUMBNAIL (MUST MATCH EXACTLY):
+=== THE ONLY PEOPLE IN THE THUMBNAIL (from face photos) ===
+DO NOT include any people from the reference - reference is FORMAT ONLY.
 """
             if primary_face:
                 enhanced_prompt += f"""
-PRIMARY PERSON (main character, reactor, focal point):
+PRIMARY PERSON (main character):
 {primary_face}
 """
 

@@ -56,35 +56,38 @@ Do not include any explanation or text outside the JSON object."""
 
 
 REFERENCE_STYLE_SECTION = """
-7. REFERENCE IMAGE REPLICATION:
-   The user has provided a reference thumbnail. You MUST replicate its EXACT structure:
+7. REFERENCE FORMAT (TEMPLATE ONLY - DO NOT COPY PEOPLE):
+   The user provided a reference thumbnail for FORMAT/LAYOUT only.
 
-   COMPOSITION:
+   IMPORTANT: The reference is ONLY a template. DO NOT copy any person from the reference.
+   The ONLY people in the final thumbnail should be from the FACE PHOTOS provided below.
+
+   USE THIS FORMAT/LAYOUT:
    {composition_details}
 
-   PERSON PLACEMENT:
+   POSE & EXPRESSION FORMAT TO APPLY (to the face photos, NOT copying reference people):
    {person_details}
 
-   TEXT ELEMENTS (adapt text to video topic but keep same styling):
+   TEXT STYLING (adapt text content to video topic):
    {text_details}
 
    GRAPHIC ELEMENTS:
    {graphic_details}
 
-   COLORS:
+   COLOR SCHEME TO USE:
    {color_details}
 
    MOOD: {mood}
 
-   RECREATION TEMPLATE:
+   FORMAT TEMPLATE:
    {recreation_prompt}
 
-   CRITICAL: Replicate the EXACT layout, composition, and style of the reference. Only change:
-   1. The person (use the face description provided)
-   2. The text content (adapt to the video topic)
-   3. The screen/graphic content (adapt to video topic)
-
-   Keep EVERYTHING ELSE identical: colors, positions, lighting style, composition percentages."""
+   CRITICAL RULES:
+   1. DO NOT copy any person from the reference thumbnail
+   2. ONLY use the face photos provided by the user as the people in the thumbnail
+   3. Apply the POSE and EXPRESSION TYPE from the reference to the user's face photos
+   4. Keep the layout, colors, lighting style, and composition from the reference
+   5. The reference people are just showing WHAT POSE/EXPRESSION to use, not WHO should appear"""
 
 
 class PromptGenerator:
@@ -208,42 +211,46 @@ class PromptGenerator:
                 if primary_face or all_faces:
                     face_section = """
 
-PEOPLE TO FEATURE IN THUMBNAIL (USE ALL OF THEM):
+========== THE ONLY PEOPLE WHO SHOULD APPEAR IN THE THUMBNAIL ==========
+IMPORTANT: These are the ONLY faces/people that should be in the generated image.
+DO NOT include ANY people from the reference thumbnail - the reference is FORMAT ONLY.
 """
                     if primary_face:
                         face_section += f"""
-PRIMARY PERSON (main character, reactor, center of attention):
+PRIMARY PERSON (this is the MAIN character - the reactor, the focal point):
 {primary_face}
 
-This person should be the MAIN focus of the thumbnail - the one reacting, pointing, or engaging the viewer.
+Apply the main pose/expression FORMAT from the reference to THIS person.
 """
 
                     for i, secondary in enumerate(secondary_faces):
                         face_section += f"""
-SECONDARY PERSON {i + 1} (supporting character):
+PERSON {i + 2} (additional character in the thumbnail):
 {secondary}
 
-This person should replace any OTHER characters shown in the reference thumbnail.
+If the reference format has multiple people, this person takes position {i + 2}.
 """
 
-                    face_section += """
-CRITICAL INSTRUCTIONS FOR FACE PHOTOS:
-- The PRIMARY person MUST appear as the main subject/reactor in the thumbnail
-- SECONDARY people replace any other characters from the reference
-- ALL face descriptions must be used - do not ignore any person
-- Match each person's features EXACTLY as described above
-- Maintain the poses and positions from the reference but with THESE specific people"""
+                    face_section += f"""
+==========================================================================
+
+ABSOLUTE RULES FOR PEOPLE IN THUMBNAIL:
+1. ONLY the {1 + len(secondary_faces)} person(s) described above should appear
+2. DO NOT copy or include ANY person from the reference image
+3. The reference image shows the FORMAT (pose, expression type, position) to apply
+4. Apply that FORMAT to the face photos described above
+5. Generate the thumbnail with ONLY these specific people"""
 
             else:
                 # Legacy string format
                 face_section = f"""
 
-PERSON TO FEATURE IN THUMBNAIL:
+========== THE ONLY PERSON WHO SHOULD APPEAR IN THE THUMBNAIL ==========
 {face_description}
 
-IMPORTANT: Replace any person in the reference thumbnail with THIS person described above.
-Keep the same pose, expression style, clothing style (or adapt appropriately), and position as the reference.
-The person's face and features must match the description above exactly."""
+DO NOT copy any person from the reference. The reference is FORMAT ONLY.
+Apply the pose/expression FORMAT from the reference to THIS person above.
+========================================================================="""
 
         user_content = f"""Analyze this video and create a viral thumbnail concept:
 
