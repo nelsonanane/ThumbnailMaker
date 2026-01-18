@@ -96,43 +96,97 @@ CRITICAL INSTRUCTIONS:
             for i in range(min(num_images, 4)):
                 print(f"[DEBUG] Generating image {i + 1}/{num_images}")
 
-                response = self.client.models.generate_content(
-                    model=self.model,
-                    contents=content_parts,
-                    config=types.GenerateContentConfig(
-                        response_modalities=["IMAGE", "TEXT"],
-                        safety_settings=[
-                            types.SafetySetting(
-                                category="HARM_CATEGORY_DANGEROUS_CONTENT",
-                                threshold="BLOCK_LOW_AND_ABOVE",
-                            ),
-                        ],
-                    ),
-                )
+                try:
+                    response = self.client.models.generate_content(
+                        model=self.model,
+                        contents=content_parts,
+                        config=types.GenerateContentConfig(
+                            response_modalities=["IMAGE", "TEXT"],
+                            safety_settings=[
+                                types.SafetySetting(
+                                    category="HARM_CATEGORY_DANGEROUS_CONTENT",
+                                    threshold="BLOCK_NONE",
+                                ),
+                                types.SafetySetting(
+                                    category="HARM_CATEGORY_HARASSMENT",
+                                    threshold="BLOCK_NONE",
+                                ),
+                                types.SafetySetting(
+                                    category="HARM_CATEGORY_HATE_SPEECH",
+                                    threshold="BLOCK_NONE",
+                                ),
+                                types.SafetySetting(
+                                    category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                                    threshold="BLOCK_ONLY_HIGH",
+                                ),
+                            ],
+                        ),
+                    )
 
-                # Extract image from response
-                if response.candidates and response.candidates[0].content:
-                    for part in response.candidates[0].content.parts:
-                        if hasattr(part, 'inline_data') and part.inline_data:
-                            mime_type = part.inline_data.mime_type
-                            image_bytes = part.inline_data.data
-                            if isinstance(image_bytes, bytes):
-                                b64_data = base64.b64encode(image_bytes).decode('utf-8')
-                            else:
-                                b64_data = image_bytes
-                            images.append(f"data:{mime_type};base64,{b64_data}")
-                            break
+                    # Extract image from response
+                    if response.candidates and len(response.candidates) > 0:
+                        candidate = response.candidates[0]
+                        if hasattr(candidate, 'content') and candidate.content:
+                            for part in candidate.content.parts:
+                                if hasattr(part, 'inline_data') and part.inline_data:
+                                    mime_type = part.inline_data.mime_type
+                                    image_bytes = part.inline_data.data
+                                    if isinstance(image_bytes, bytes):
+                                        b64_data = base64.b64encode(image_bytes).decode('utf-8')
+                                    else:
+                                        b64_data = image_bytes
+                                    images.append(f"data:{mime_type};base64,{b64_data}")
+                                    break
+
+                except Exception as gen_error:
+                    error_str = str(gen_error)
+                    print(f"[WARNING] Image {i + 1} generation error: {error_str}")
+
+                    # Check for safety-related errors
+                    if "IMAGE_SAFETY" in error_str or "safety" in error_str.lower():
+                        print(f"[WARNING] Safety filter triggered. Trying without face images...")
+                        # Try generating without face images as fallback
+                        try:
+                            fallback_response = self.client.models.generate_content(
+                                model=self.model,
+                                contents=[generation_prompt],  # Just the text prompt
+                                config=types.GenerateContentConfig(
+                                    response_modalities=["IMAGE", "TEXT"],
+                                ),
+                            )
+                            if fallback_response.candidates and len(fallback_response.candidates) > 0:
+                                candidate = fallback_response.candidates[0]
+                                if hasattr(candidate, 'content') and candidate.content:
+                                    for part in candidate.content.parts:
+                                        if hasattr(part, 'inline_data') and part.inline_data:
+                                            mime_type = part.inline_data.mime_type
+                                            image_bytes = part.inline_data.data
+                                            if isinstance(image_bytes, bytes):
+                                                b64_data = base64.b64encode(image_bytes).decode('utf-8')
+                                            else:
+                                                b64_data = image_bytes
+                                            images.append(f"data:{mime_type};base64,{b64_data}")
+                                            print(f"[DEBUG] Fallback image {i + 1} generated successfully")
+                                            break
+                        except Exception as fallback_error:
+                            print(f"[ERROR] Fallback also failed: {fallback_error}")
+                            continue
+                    else:
+                        # For other errors, just continue to next attempt
+                        continue
 
             generation_time_ms = int((time.time() - start_time) * 1000)
 
             if not images:
-                raise ValueError("No images generated")
+                raise ValueError("No images generated. The safety filter may have blocked the request. Try different face photos or a simpler prompt.")
 
             return {
                 "images": images,
                 "generation_time_ms": generation_time_ms,
             }
 
+        except ValueError:
+            raise
         except Exception as e:
             raise ValueError(f"Image generation failed: {str(e)}")
 
