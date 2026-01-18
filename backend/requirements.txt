@@ -1,0 +1,33 @@
+# Web Framework
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# AI Services
+fal-client==0.5.9
+openai==1.59.7
+google-genai==1.0.0
+
+# Image Processing
+Pillow==11.1.0
+
+# YouTube
+youtube-transcript-api==1.2.3
+google-api-python-client==2.159.0
+
+# Database
+supabase==2.11.0
+
+# Task Queue
+celery==5.4.0
+redis==5.2.1
+
+# Utilities
+python-dotenv==1.0.1
+pydantic==2.10.5
+pydantic-settings==2.7.1
+httpx==0.28.1
+
+# Development
+pytest==8.3.4
+pytest-asyncio==0.25.2
