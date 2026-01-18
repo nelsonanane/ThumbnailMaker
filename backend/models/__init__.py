@@ -50,12 +50,18 @@ class ReferenceImage(BaseModel):
     description: Optional[str] = Field(None, description="Optional user-provided description")
 
 
+class FacePhotoWithName(BaseModel):
+    """A face photo with its name for prompt labeling."""
+    data: str = Field(..., description="Base64 encoded image data")
+    name: str = Field(..., description="Original file name for labeling in prompts")
+
+
 class VideoURLRequest(BaseModel):
     """Request to generate thumbnail from YouTube URL."""
     url: str = Field(..., description="YouTube video URL")
     template_id: Optional[str] = Field(None, description="Template style to use")
     face_model_id: Optional[str] = Field(None, description="Trained face model ID")
-    face_images: Optional[List[str]] = Field(None, description="Base64 encoded face photos for inclusion")
+    face_images: Optional[List[FacePhotoWithName]] = Field(None, description="Face photos with names for prompt labeling")
     reference_thumbnails: Optional[List[ReferenceImage]] = Field(None, description="Reference thumbnail examples to analyze")
     num_variations: int = Field(4, ge=1, le=8, description="Number of variations")
     add_text_overlay: bool = Field(True, description="Add text overlay to thumbnails")
@@ -68,7 +74,7 @@ class PromptRequest(BaseModel):
     template_id: Optional[str] = Field(None, description="Template style to use")
     face_model_id: Optional[str] = Field(None, description="Trained face model ID")
     face_image_url: Optional[str] = Field(None, description="Single-shot face image URL")
-    face_images: Optional[List[str]] = Field(None, description="Base64 encoded face photos for inclusion")
+    face_images: Optional[List[FacePhotoWithName]] = Field(None, description="Face photos with names for prompt labeling")
     reference_thumbnails: Optional[List[ReferenceImage]] = Field(None, description="Reference thumbnail examples to analyze")
     num_variations: int = Field(4, ge=1, le=8, description="Number of variations")
     add_text_overlay: bool = Field(False, description="Add text overlay to thumbnails")

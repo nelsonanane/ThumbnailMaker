@@ -186,9 +186,9 @@ export const useThumbnailStore = create<ThumbnailState>()(
             ? referenceThumbnails.map(ref => ({ data: ref.data, description: ref.description }))
             : undefined;
 
-          // Prepare face photos for API (extract base64 data)
+          // Prepare face photos for API (with names for prompt labeling)
           const faceImageData = facePhotos.length > 0
-            ? facePhotos.map(photo => photo.data)
+            ? facePhotos.map(photo => ({ data: photo.data, name: photo.name }))
             : undefined;
 
           const response = await api.generateFromURL({
@@ -235,9 +235,9 @@ export const useThumbnailStore = create<ThumbnailState>()(
             ? referenceThumbnails.map(ref => ({ data: ref.data, description: ref.description }))
             : undefined;
 
-          // Prepare face photos for API (extract base64 data)
+          // Prepare face photos for API (with names for prompt labeling)
           const faceImageData = facePhotos.length > 0
-            ? facePhotos.map(photo => photo.data)
+            ? facePhotos.map(photo => ({ data: photo.data, name: photo.name }))
             : undefined;
 
           const response = await api.generateFromPrompt({

@@ -33,7 +33,7 @@ class ImagenGenerator:
         num_images: int = 4,
         aspect_ratio: str = "16:9",
         reference_image: Optional[str] = None,
-        face_images: Optional[List[str]] = None,
+        face_photos: Optional[List[tuple]] = None,
         safety_filter_level: str = "block_low_and_above",
         person_generation: str = "allow_adult",
     ) -> dict:
@@ -45,7 +45,7 @@ class ImagenGenerator:
             num_images: Number of variations to generate (1-4)
             aspect_ratio: Output aspect ratio (16:9 for thumbnails)
             reference_image: Base64 reference thumbnail - use for FORMAT/LAYOUT only, NOT people
-            face_images: List of base64 face photos - these are the ONLY people in the thumbnail
+            face_photos: List of (base64_data, file_name) tuples - these are the ONLY people in the thumbnail
             safety_filter_level: Safety filter threshold
             person_generation: Person generation setting
 
@@ -74,25 +74,30 @@ This image shows the FORMAT/LAYOUT to replicate:
 - Copy the text styling and placement
 - Copy the pose TYPES and expression TYPES
 
-⚠️ CRITICAL: DO NOT copy any PEOPLE from this reference image.
+⚠️ CRITICAL: NO FACES from this reference thumbnail should EVER be used in the final output.
 The people/characters in this reference are just placeholders showing poses.
-You must use ONLY the face photos provided below for all people in the thumbnail."""
+You must use ONLY the face photos provided below for all people in the thumbnail.
+NEVER include any face from the reference - only use the face photos provided."""
                 )
 
         # SECOND: Add ALL face photos - these replace ALL characters in the reference
-        if face_images and len(face_images) > 0:
-            print(f"[DEBUG] Including {len(face_images)} face photo(s) - these are the ONLY people to use")
+        if face_photos and len(face_photos) > 0:
+            print(f"[DEBUG] Including {len(face_photos)} face photo(s) - these are the ONLY people to use")
+            face_names = [name for _, name in face_photos]
             content_parts.append(
-                f"""FACE PHOTOS ({len(face_images)} provided):
+                f"""FACE PHOTOS ({len(face_photos)} provided):
 These are the ONLY people who should appear in the final thumbnail.
 Use these faces to replace ALL characters/people from the reference format.
-Each face can be used for any character position in the layout."""
+Each face can be used for any character position in the layout.
+Face photos provided: {', '.join(face_names)}"""
             )
-            for i, face_data in enumerate(face_images):
+            for i, (face_data, face_name) in enumerate(face_photos):
                 face_bytes = self._decode_base64_image(face_data)
                 if face_bytes:
                     content_parts.append(types.Part.from_bytes(data=face_bytes, mime_type="image/png"))
-                    content_parts.append(f"FACE {i + 1}: Use this person's EXACT face, skin tone, and features.")
+                    # Use the file name (without extension) as the face label
+                    clean_name = face_name.rsplit('.', 1)[0] if '.' in face_name else face_name
+                    content_parts.append(f"FACE '{clean_name}': Use this person's EXACT face, skin tone, and features.")
 
         # THIRD: Add the main generation prompt
         generation_prompt = f"""Generate a YouTube thumbnail image with {aspect_ratio} aspect ratio.
@@ -108,7 +113,7 @@ GENERATION RULES:
 5. Adapt the content (text, graphics) to match the video context
 6. Maintain professional YouTube thumbnail quality
 
-⚠️ ABSOLUTE RULE: No person from the reference image should appear. Only the provided face photos."""
+⚠️ ABSOLUTE RULE: NO FACES from the reference thumbnail should EVER appear in the final output. Only the provided face photos."""
 
         content_parts.append(generation_prompt)
 

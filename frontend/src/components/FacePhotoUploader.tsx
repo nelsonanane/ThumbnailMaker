@@ -18,6 +18,7 @@ export function FacePhotoUploader() {
         const base64 = reader.result as string;
         addFacePhoto({
           data: base64,
+          name: file.name,
           preview: URL.createObjectURL(file),
         });
       };
@@ -107,9 +108,9 @@ export function FacePhotoUploader() {
                 </svg>
               </button>
 
-              {/* Face number badge */}
-              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 transform rounded-t bg-purple-500 px-2 py-0.5 text-[10px] font-medium text-white">
-                Face {index + 1}
+              {/* Face label badge - shows file name */}
+              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 transform rounded-t bg-purple-500 px-2 py-0.5 text-[10px] font-medium text-white max-w-full truncate" title={photo.name || `Face ${index + 1}`}>
+                {photo.name ? photo.name.replace(/\.[^.]+$/, '').slice(0, 10) : `Face ${index + 1}`}
               </div>
             </div>
           ))}

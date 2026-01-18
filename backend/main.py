@@ -275,16 +275,23 @@ async def generate_from_url(
 
         # Step 4: Analyze face photos if provided
         face_description = None
+        face_photos_data = None  # List of (data, name) tuples for imagen_generator
         if request.face_images and len(request.face_images) > 0:
             try:
                 print(f"[DEBUG] Analyzing {len(request.face_images)} face photo(s)...")
-                face_description = reference_analyzer.analyze_face_photos(request.face_images)
+                # Extract just the base64 data for analysis
+                face_data_list = [photo.data for photo in request.face_images]
+                face_description = reference_analyzer.analyze_face_photos(face_data_list)
+                # Prepare face photos with names for imagen_generator
+                face_photos_data = [(photo.data, photo.name) for photo in request.face_images]
+                print(f"[DEBUG] Face photos: {[name for _, name in face_photos_data]}")
                 print(f"[DEBUG] Face description: {face_description}")
             except Exception as e:
                 print(f"[ERROR] Failed to analyze face photos: {e}")
                 import traceback
                 traceback.print_exc()
                 face_description = None
+                face_photos_data = None
 
         # Step 5: Get template system prompt if specified
         template_prompt = None
@@ -315,14 +322,14 @@ async def generate_from_url(
                 reference_image = request.reference_thumbnails[0].data
                 print(f"[DEBUG] Passing reference thumbnail for FORMAT only (not people)")
 
-            if request.face_images and len(request.face_images) > 0:
-                print(f"[DEBUG] Passing {len(request.face_images)} face photo(s) - these replace ALL characters")
+            if face_photos_data and len(face_photos_data) > 0:
+                print(f"[DEBUG] Passing {len(face_photos_data)} face photo(s) - these replace ALL characters")
 
             result = await imagen_generator.generate_thumbnail(
                 prompt=prompt_data["prompt"],
                 num_images=request.num_variations,
                 reference_image=reference_image,  # For FORMAT only
-                face_images=request.face_images,  # ALL faces for ALL characters
+                face_photos=face_photos_data,  # ALL faces with names for ALL characters
             )
         else:
             print(f"[DEBUG] Using FLUX for generation (Imagen not available)")
@@ -403,12 +410,18 @@ async def generate_from_prompt(
 
         # Analyze face photos if provided
         face_description = None
+        face_photos_data = None  # List of (data, name) tuples for imagen_generator
         if request.face_images and len(request.face_images) > 0:
             try:
-                face_description = reference_analyzer.analyze_face_photos(request.face_images)
+                # Extract just the base64 data for analysis
+                face_data_list = [photo.data for photo in request.face_images]
+                face_description = reference_analyzer.analyze_face_photos(face_data_list)
+                # Prepare face photos with names for imagen_generator
+                face_photos_data = [(photo.data, photo.name) for photo in request.face_images]
             except Exception as e:
                 print(f"Warning: Failed to analyze face photos: {e}")
                 face_description = None
+                face_photos_data = None
 
         # Enhance prompt with reference style if analysis available
         enhanced_prompt = request.prompt
@@ -429,14 +442,14 @@ async def generate_from_prompt(
                 reference_image = request.reference_thumbnails[0].data
                 print(f"[DEBUG] Passing reference thumbnail for FORMAT only")
 
-            if request.face_images and len(request.face_images) > 0:
-                print(f"[DEBUG] Passing {len(request.face_images)} face photo(s) - replace ALL characters")
+            if face_photos_data and len(face_photos_data) > 0:
+                print(f"[DEBUG] Passing {len(face_photos_data)} face photo(s) - replace ALL characters")
 
             result = await imagen_generator.generate_thumbnail(
                 prompt=enhanced_prompt,
                 num_images=request.num_variations,
                 reference_image=reference_image,
-                face_images=request.face_images,
+                face_photos=face_photos_data,  # ALL faces with names for ALL characters
             )
         else:
             print(f"[DEBUG] Using FLUX for generation (Imagen not available)")

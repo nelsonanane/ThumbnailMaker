@@ -58,14 +58,20 @@ export interface ReferenceImage {
 
 export interface UploadedFacePhoto {
   data: string; // Base64 encoded image data
+  name: string; // Original file name
   preview?: string; // Preview URL for display (optional, client-side only)
+}
+
+export interface FacePhotoForAPI {
+  data: string; // Base64 encoded image data
+  name: string; // Original file name for prompt labeling
 }
 
 export interface GenerateFromURLRequest {
   url: string;
   template_id?: string;
   face_model_id?: string;
-  face_images?: string[]; // Base64 encoded face photos
+  face_images?: FacePhotoForAPI[]; // Face photos with names for prompt labeling
   reference_thumbnails?: ReferenceImage[];
   num_variations?: number;
   add_text_overlay?: boolean;
@@ -77,7 +83,7 @@ export interface GenerateFromPromptRequest {
   template_id?: string;
   face_model_id?: string;
   face_image_url?: string;
-  face_images?: string[]; // Base64 encoded face photos
+  face_images?: FacePhotoForAPI[]; // Face photos with names for prompt labeling
   reference_thumbnails?: ReferenceImage[];
   num_variations?: number;
   add_text_overlay?: boolean;
