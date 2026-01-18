@@ -32,6 +32,7 @@ class ImagenGenerator:
         prompt: str,
         num_images: int = 4,
         aspect_ratio: str = "16:9",
+        reference_image: Optional[str] = None,
         face_images: Optional[List[str]] = None,
         safety_filter_level: str = "block_low_and_above",
         person_generation: str = "allow_adult",
@@ -40,52 +41,74 @@ class ImagenGenerator:
         Generate thumbnail images using Gemini 3 Pro Image Preview.
 
         Args:
-            prompt: Image generation prompt (contains FORMAT description from reference analysis)
+            prompt: Image generation prompt with video context
             num_images: Number of variations to generate (1-4)
             aspect_ratio: Output aspect ratio (16:9 for thumbnails)
-            face_images: List of base64 encoded face photos - these are the ONLY people in the thumbnail
+            reference_image: Base64 reference thumbnail - use for FORMAT/LAYOUT only, NOT people
+            face_images: List of base64 face photos - these are the ONLY people in the thumbnail
             safety_filter_level: Safety filter threshold
             person_generation: Person generation setting
 
         Returns:
             Dictionary with images list (base64) and generation_time_ms
-
-        NOTE: Reference images are NOT passed here. The reference is analyzed separately
-        and the FORMAT (layout, poses, colors) is included as TEXT in the prompt.
-        Only face_images are passed - these are the ONLY people who should appear.
         """
         start_time = time.time()
 
         # Build the prompt with thumbnail optimization
         enhanced_prompt = self._enhance_prompt_for_thumbnails(prompt)
 
-        # Build the content array with face images and text
+        # Build the content array
         content_parts = []
 
-        # Add ALL face photos - these are the ONLY people who should appear
+        # FIRST: Add the reference image for FORMAT/LAYOUT only
+        if reference_image:
+            print(f"[DEBUG] Including reference thumbnail for FORMAT only")
+            ref_bytes = self._decode_base64_image(reference_image)
+            if ref_bytes:
+                content_parts.append(types.Part.from_bytes(data=ref_bytes, mime_type="image/png"))
+                content_parts.append(
+                    """REFERENCE THUMBNAIL (FORMAT ONLY):
+This image shows the FORMAT/LAYOUT to replicate:
+- Copy the EXACT composition, layout, and positioning
+- Copy the color scheme, lighting style, and mood
+- Copy the text styling and placement
+- Copy the pose TYPES and expression TYPES
+
+⚠️ CRITICAL: DO NOT copy any PEOPLE from this reference image.
+The people/characters in this reference are just placeholders showing poses.
+You must use ONLY the face photos provided below for all people in the thumbnail."""
+                )
+
+        # SECOND: Add ALL face photos - these replace ALL characters in the reference
         if face_images and len(face_images) > 0:
-            print(f"[DEBUG] Including {len(face_images)} face photo(s) in Gemini request")
+            print(f"[DEBUG] Including {len(face_images)} face photo(s) - these are the ONLY people to use")
+            content_parts.append(
+                f"""FACE PHOTOS ({len(face_images)} provided):
+These are the ONLY people who should appear in the final thumbnail.
+Use these faces to replace ALL characters/people from the reference format.
+Each face can be used for any character position in the layout."""
+            )
             for i, face_data in enumerate(face_images):
                 face_bytes = self._decode_base64_image(face_data)
                 if face_bytes:
                     content_parts.append(types.Part.from_bytes(data=face_bytes, mime_type="image/png"))
-                    content_parts.append(
-                        f"FACE {i + 1}: This is a person who MUST appear in the thumbnail. Use their EXACT face, skin tone, and features."
-                    )
+                    content_parts.append(f"FACE {i + 1}: Use this person's EXACT face, skin tone, and features.")
 
-        # Add the main generation prompt
-        # The prompt already contains the FORMAT (layout, poses, colors) from reference analysis
+        # THIRD: Add the main generation prompt
         generation_prompt = f"""Generate a YouTube thumbnail image with {aspect_ratio} aspect ratio.
 
+VIDEO CONTEXT:
 {enhanced_prompt}
 
-CRITICAL INSTRUCTIONS:
-1. The layout, poses, expressions, and colors described above come from a reference FORMAT
-2. Use ONLY the face photo(s) provided above as the people in the thumbnail
-3. DO NOT invent or generate any other people - only use the faces provided
-4. Apply the described poses and expressions to the provided faces
-5. If multiple faces are provided, use them all in the positions described
-6. Maintain professional YouTube thumbnail quality"""
+GENERATION RULES:
+1. Use the REFERENCE FORMAT above for layout, composition, colors, poses, and style
+2. Use ONLY the FACE PHOTOS above as the people - DO NOT use anyone from the reference
+3. The faces provided can fill ANY/ALL character positions in the format
+4. Apply the pose types and expression types from the reference to the provided faces
+5. Adapt the content (text, graphics) to match the video context
+6. Maintain professional YouTube thumbnail quality
+
+⚠️ ABSOLUTE RULE: No person from the reference image should appear. Only the provided face photos."""
 
         content_parts.append(generation_prompt)
 
