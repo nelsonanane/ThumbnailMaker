@@ -106,7 +106,9 @@ Example output: "A Black man in his 30s with dark brown skin, short black hair, 
 Be specific and detailed so the AI can accurately generate images of this person."""
 
 
-MULTI_FACE_ANALYSIS_PROMPT = """Analyze these face photos. Each photo is a DIFFERENT person who should appear in the thumbnail.
+MULTI_FACE_ANALYSIS_PROMPT = """Analyze these face photos. Each photo is a DIFFERENT person who will appear in the thumbnail.
+
+These faces will REPLACE the characters in a reference thumbnail format.
 
 For EACH person, provide a detailed description including:
 1. ETHNICITY/SKIN TONE: Specific description
@@ -122,21 +124,21 @@ Return a JSON object with this structure:
     "faces": [
         {
             "index": 1,
-            "role": "primary",
-            "description": "Detailed description of person 1 (this is the MAIN character/reactor)"
+            "description": "Detailed description of person from face photo 1"
         },
         {
             "index": 2,
-            "role": "secondary",
-            "description": "Detailed description of person 2 (this replaces other people in reference)"
+            "description": "Detailed description of person from face photo 2"
         }
     ],
+    "total_faces": 2,
     "combined_description": "A summary describing all people for use in prompts"
 }
 
 IMPORTANT:
-- Person 1 (first photo) is ALWAYS the PRIMARY person - the main character, the reactor, the focal point
-- Person 2+ are SECONDARY people who replace any other characters in reference thumbnails
+- Each face photo is a different person
+- ALL faces will be used in the final thumbnail
+- These faces REPLACE the characters in the reference format (not copy them)
 - Be extremely detailed so the AI can accurately generate these specific people"""
 
 
@@ -287,42 +289,43 @@ class ReferenceAnalyzer:
     ) -> dict:
         """
         Analyze ALL face photos individually and generate descriptions for each.
+        All faces are treated equally - they will replace characters in the reference format.
 
         Args:
             face_images: List of base64 encoded face photos
 
         Returns:
-            Dictionary with individual face descriptions and combined description:
+            Dictionary with individual face descriptions:
             {
                 "faces": [
-                    {"index": 1, "role": "primary", "description": "..."},
-                    {"index": 2, "role": "secondary", "description": "..."}
+                    {"index": 1, "description": "..."},
+                    {"index": 2, "description": "..."}
                 ],
+                "total_faces": 2,
                 "combined_description": "...",
-                "primary_face": "description of first/main person",
-                "secondary_faces": ["descriptions of other people"]
+                "face_descriptions": ["desc1", "desc2"]  # Simple list for easy access
             }
         """
         if not face_images:
             return {
                 "faces": [],
+                "total_faces": 0,
                 "combined_description": "",
-                "primary_face": "",
-                "secondary_faces": []
+                "face_descriptions": []
             }
 
         # Build content with ALL face images labeled
         content = [
             {
                 "type": "text",
-                "text": f"Analyze these {len(face_images)} face photos. Each is a DIFFERENT person:"
+                "text": f"Analyze these {len(face_images)} face photos. Each is a DIFFERENT person who will appear in the thumbnail:"
             }
         ]
 
         for i, face_image in enumerate(face_images):
             content.append({
                 "type": "text",
-                "text": f"\n--- PERSON {i + 1} {'(PRIMARY - main character/reactor)' if i == 0 else '(SECONDARY - replaces other characters)'} ---"
+                "text": f"\n--- FACE PHOTO {i + 1} ---"
             })
             content.append(self._prepare_image_content(face_image))
 
@@ -343,25 +346,21 @@ class ReferenceAnalyzer:
         try:
             result = json.loads(raw_content.strip())
         except json.JSONDecodeError:
-            # Fallback: analyze first face only
             result = {
-                "faces": [{"index": 1, "role": "primary", "description": "A person"}],
+                "faces": [{"index": 1, "description": "A person"}],
                 "combined_description": "A person"
             }
 
-        # Extract primary and secondary faces for easier access
+        # Extract face descriptions into a simple list
         faces = result.get("faces", [])
-        primary_face = ""
-        secondary_faces = []
+        face_descriptions = [face.get("description", "") for face in faces]
 
-        for face in faces:
-            if face.get("role") == "primary" or face.get("index") == 1:
-                primary_face = face.get("description", "")
-            else:
-                secondary_faces.append(face.get("description", ""))
+        result["face_descriptions"] = face_descriptions
+        result["total_faces"] = len(face_descriptions)
 
-        result["primary_face"] = primary_face
-        result["secondary_faces"] = secondary_faces
+        # Keep backward compatibility (but these are just for legacy code - all faces are equal now)
+        result["primary_face"] = face_descriptions[0] if face_descriptions else ""
+        result["secondary_faces"] = face_descriptions[1:] if len(face_descriptions) > 1 else []
 
         return result
 
@@ -399,40 +398,46 @@ class ReferenceAnalyzer:
         face_description: Optional[dict] = None,
     ) -> str:
         """
-        Enhance a base prompt with reference style information and multiple face descriptions.
+        Enhance a base prompt with reference FORMAT and face descriptions.
+        All faces replace characters in the reference format.
 
         Args:
             base_prompt: The original image generation prompt
-            reference_analysis: Analysis from analyze_reference_thumbnails()
+            reference_analysis: Analysis from analyze_reference_thumbnails() - FORMAT only
             face_description: Dictionary from analyze_face_photos() with faces list
 
         Returns:
-            Enhanced prompt incorporating style information and ALL faces
+            Enhanced prompt with format info and ALL faces to use
         """
         enhanced_prompt = base_prompt
 
-        # Handle face_description - can be dict (new) or string (legacy)
-        primary_face = ""
-        secondary_faces = []
-
+        # Get all face descriptions
+        face_descriptions = []
         if face_description:
             if isinstance(face_description, dict):
-                primary_face = face_description.get("primary_face", "")
-                secondary_faces = face_description.get("secondary_faces", [])
+                face_descriptions = face_description.get("face_descriptions", [])
+                # Fallback to old format
+                if not face_descriptions:
+                    if face_description.get("primary_face"):
+                        face_descriptions = [face_description.get("primary_face")] + face_description.get("secondary_faces", [])
             else:
                 # Legacy string format
-                primary_face = face_description
+                face_descriptions = [face_description]
 
         if reference_analysis:
-            # Use the format_prompt if available (new format)
+            # Use the format_prompt if available
             format_prompt = reference_analysis.get('format_prompt') or reference_analysis.get('recreation_prompt', '')
             if format_prompt:
-                # Replace placeholders with actual face descriptions
-                if primary_face:
-                    format_prompt = format_prompt.replace('[PRIMARY_PERSON]', primary_face)
-                    format_prompt = format_prompt.replace('[PERSON_DESCRIPTION]', primary_face)
-                for i, sec in enumerate(secondary_faces):
-                    format_prompt = format_prompt.replace(f'[SECONDARY_PERSON_{i+1}]', sec)
+                # Replace placeholders with face descriptions
+                for i, face_desc in enumerate(face_descriptions):
+                    format_prompt = format_prompt.replace(f'[FACE_{i+1}]', face_desc)
+                    format_prompt = format_prompt.replace(f'[PERSON_{i+1}]', face_desc)
+                    # Legacy placeholders
+                    if i == 0:
+                        format_prompt = format_prompt.replace('[PRIMARY_PERSON]', face_desc)
+                        format_prompt = format_prompt.replace('[PERSON_DESCRIPTION]', face_desc)
+                    else:
+                        format_prompt = format_prompt.replace(f'[SECONDARY_PERSON_{i}]', face_desc)
                 format_prompt = format_prompt.replace('[VIDEO_TOPIC]', base_prompt)
                 enhanced_prompt = format_prompt
 
@@ -446,35 +451,31 @@ class ReferenceAnalyzer:
 === REFERENCE FORMAT (layout/style only - NOT the people) ===
 Layout: {composition.get('layout_type', 'split')}
 Person positions: {composition.get('person_positions', ['left side'])}
-Person fills {composition.get('person_size', '80%')} of frame height
+Number of characters: {composition.get('person_count', 1)}
 
 Pose/Expression FORMAT to apply:
 {pose_format.get('primary_person', {}).get('pose', 'engaging pose')} with {pose_format.get('primary_person', {}).get('expression_type', 'expressive face')}
 
-Color scheme: Primary {colors.get('primary', 'white')}, Accent {colors.get('accent', 'yellow')}, Background {colors.get('background', 'white')}
+Colors: {colors.get('primary', 'white')}, {colors.get('accent', 'yellow')}, {colors.get('background', 'white')}
 Lighting: {reference_analysis.get('lighting_style', 'dramatic lighting')}
 Mood: {reference_analysis.get('mood', 'energetic')}
 === END FORMAT ===
 """
             enhanced_prompt += style_addition
 
-        # Add face descriptions - these are the ONLY people who should appear
-        if primary_face or secondary_faces:
-            enhanced_prompt += """
+        # Add face descriptions - these REPLACE characters in the reference format
+        if face_descriptions:
+            enhanced_prompt += f"""
 
-=== THE ONLY PEOPLE IN THE THUMBNAIL (from face photos) ===
-DO NOT include any people from the reference - reference is FORMAT ONLY.
+=== FACES TO USE ({len(face_descriptions)} people) ===
+These faces REPLACE the characters in the reference format.
+DO NOT include anyone from the reference - use ONLY these faces.
 """
-            if primary_face:
+            for i, face_desc in enumerate(face_descriptions):
                 enhanced_prompt += f"""
-PRIMARY PERSON (main character):
-{primary_face}
+FACE {i + 1}:
+{face_desc}
 """
-
-            for i, secondary in enumerate(secondary_faces):
-                enhanced_prompt += f"""
-SECONDARY PERSON {i + 1} (replaces other characters in reference):
-{secondary}
-"""
+            enhanced_prompt += "=== END FACES ==="
 
         return enhanced_prompt

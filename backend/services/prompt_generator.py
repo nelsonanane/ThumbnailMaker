@@ -199,58 +199,50 @@ class PromptGenerator:
         description = video_data.get('description') or 'No description'
         transcript = video_data.get('transcript') or 'No transcript available'
 
-        # Build face description section - handle both dict (new) and string (legacy)
+        # Build face description section - these faces REPLACE the characters in the reference format
         face_section = ""
         if face_description:
             if isinstance(face_description, dict):
-                # New format with multiple faces
-                primary_face = face_description.get("primary_face", "")
-                secondary_faces = face_description.get("secondary_faces", [])
-                all_faces = face_description.get("faces", [])
+                # Get all face descriptions
+                face_descriptions = face_description.get("face_descriptions", [])
+                # Fallback to old format if needed
+                if not face_descriptions:
+                    if face_description.get("primary_face"):
+                        face_descriptions = [face_description.get("primary_face")] + face_description.get("secondary_faces", [])
 
-                if primary_face or all_faces:
-                    face_section = """
+                if face_descriptions:
+                    face_section = f"""
 
-========== THE ONLY PEOPLE WHO SHOULD APPEAR IN THE THUMBNAIL ==========
-IMPORTANT: These are the ONLY faces/people that should be in the generated image.
-DO NOT include ANY people from the reference thumbnail - the reference is FORMAT ONLY.
+========== FACES TO USE IN THUMBNAIL ({len(face_descriptions)} people) ==========
+These faces REPLACE the characters in the reference format.
+DO NOT include ANY people from the reference thumbnail - use ONLY these faces.
 """
-                    if primary_face:
+                    for i, face_desc in enumerate(face_descriptions):
                         face_section += f"""
-PRIMARY PERSON (this is the MAIN character - the reactor, the focal point):
-{primary_face}
-
-Apply the main pose/expression FORMAT from the reference to THIS person.
-"""
-
-                    for i, secondary in enumerate(secondary_faces):
-                        face_section += f"""
-PERSON {i + 2} (additional character in the thumbnail):
-{secondary}
-
-If the reference format has multiple people, this person takes position {i + 2}.
+FACE {i + 1}:
+{face_desc}
 """
 
                     face_section += f"""
 ==========================================================================
 
-ABSOLUTE RULES FOR PEOPLE IN THUMBNAIL:
-1. ONLY the {1 + len(secondary_faces)} person(s) described above should appear
-2. DO NOT copy or include ANY person from the reference image
-3. The reference image shows the FORMAT (pose, expression type, position) to apply
-4. Apply that FORMAT to the face photos described above
-5. Generate the thumbnail with ONLY these specific people"""
+RULES:
+1. Use ONLY the {len(face_descriptions)} face(s) described above
+2. These faces REPLACE the characters shown in the reference format
+3. DO NOT copy any person from the reference image
+4. Apply the poses/expressions/positions from the reference FORMAT to these faces
+5. If reference has 2 characters and 2 faces provided, Face 1 replaces character 1, Face 2 replaces character 2"""
 
             else:
                 # Legacy string format
                 face_section = f"""
 
-========== THE ONLY PERSON WHO SHOULD APPEAR IN THE THUMBNAIL ==========
+========== FACE TO USE IN THUMBNAIL ==========
 {face_description}
 
-DO NOT copy any person from the reference. The reference is FORMAT ONLY.
-Apply the pose/expression FORMAT from the reference to THIS person above.
-========================================================================="""
+This face REPLACES the character in the reference format.
+DO NOT copy any person from the reference.
+=============================================="""
 
         user_content = f"""Analyze this video and create a viral thumbnail concept:
 

@@ -408,15 +408,15 @@ export default function Home() {
                 </li>
                 <li className="flex gap-2">
                   <span className="text-purple-400">2.</span>
-                  Upload reference thumbnails to match their style
+                  Upload a reference thumbnail (for format/layout only)
                 </li>
                 <li className="flex gap-2">
                   <span className="text-purple-400">3.</span>
-                  Add face photos (first = main character, others = supporting)
+                  Upload face photos to replace the characters in the reference
                 </li>
                 <li className="flex gap-2">
                   <span className="text-purple-400">4.</span>
-                  AI uses ALL faces and generates 4 thumbnail variations
+                  AI generates 4 variations using your faces in that format
                 </li>
                 <li className="flex gap-2">
                   <span className="text-purple-400">5.</span>
